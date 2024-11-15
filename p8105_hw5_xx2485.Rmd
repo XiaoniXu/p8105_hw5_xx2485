@@ -257,7 +257,7 @@ conf_low
 conf_high
 ```
 
-Run `prop.test` for each of the cities in your dataset, and extract both the proportion of unsolved homicides and the confidence interval for each. 
+Run `prop.test` for each of the cities in the dataset, and extract both the proportion of unsolved homicides and the confidence interval for each. 
 
 ```{r}
 # Create a tidy pipeline to calculate proportions and confidence intervals for each city
@@ -304,7 +304,7 @@ ggplot(plot_data, aes(x = city_state, y = estimated_proportion)) +
 
 
 
-### Some purely exploratory plots; 
+### Some purely exploratory plots
 
 NOT PART OF THE ANSWER - DO NOT GRADE. Set to `eval = FALSE` at the moment.
 
