@@ -2,12 +2,17 @@
 title: "p8105_hw5_xx2485"
 author: "Xiaoni Xu"
 date: "2024-11-14"
-output: html_document
+output: github_document
 ---
 
 Loading needed packages
 ```{r, message = FALSE}
 library(tidyverse)
+library(dplyr)
+library(readr)
+library(purrr)
+library(tidyr)
+library(ggplot2)
 ```
 
 
@@ -56,4 +61,374 @@ plot(group_sizes, probabilities, type = "o", pch = 16, col = "#00a497",
 grid()
 ```
 The curve shows a typical S-shape with the reflection point ar around 23. The curve shows a generally exponential growth between population size of 2 and 23, and a stabilization phase between population size of 23 and 50. Starting from group size of 2, the probability of shared birthday is almost 0, and for group size of 50, the probability of such reaches 1.
+
+### Problem 2
+
+
+```{r}
+# Define a function to simulate data
+sim_mean_pval <- function(n, mu = 0, sigma = 5) {
+  sim_data <- tibble(
+    x = rnorm(n, mean = mu, sd = sigma)
+  )
+  # Estimate mean and perform t-test
+  t_test_result <- t.test(sim_data$x, mu = 0)
+  result <- tibble(
+    mu_hat = mean(sim_data$x),
+    p_value = broom::tidy(t_test_result)$p.value
+  )
+  return(result)
+}
+
+# Run the function 5000 times and store results
+set.seed(1)  # For reproducibility
+output <- vector("list", 5000)
+
+for (i in 1:5000) {
+  output[[i]] <- sim_mean_pval(n = 30)
+}
+
+# Combine the results into a single data frame
+sim_results <- bind_rows(output)
+
+# Display a summary of the results
+summary(sim_results)
+```
+
+Repeat for mu = 1, 2, 3, 4, 5, 6
+```{r}
+# Run the simulation for mu values from 1 to 6
+mu_values <- 1:6
+results <- list()
+
+for (mu in mu_values) {
+  # Store results for each mu in a list of data frames
+  output <- replicate(5000, sim_mean_pval(n = 30, mu = mu), simplify = TRUE)
+  sim_results <- as.data.frame(t(output))
+  sim_results$mu <- mu  # Add a column indicating the current mu value
+  results[[as.character(mu)]] <- sim_results
+}
+
+# Combine all results into a single data frame
+all_results <- bind_rows(results)
+
+```
+
+Make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of $\mu$ on the x axis.
+ 
+```{r}
+# Calculate the proportion of times the null hypothesis was rejected for each mu value
+power <- all_results %>%
+  group_by(mu) %>%
+  summarize(power = mean(p_value < 0.05))
+
+# Plot the power of the test versus the true mean (mu)
+plot(power$mu, power$power, type = "o", pch = 16, col = "#00a497",
+     xlab = expression("True Value of " * mu), 
+     ylab = "Power of the Test (Proportion of Rejections)",
+     main = expression("Power of the Test vs. Effect Size (True " * mu * ")"))
+
+```
+
+Power represents the probability of correctly rejecting the null hypothesis when it is false. As the effect size (in this case, the true mean $\mu$) increases, the power of the test also increases. 
+
+
+Make a plot showing the average estimate of $\hat{\mu}$ on the y-axis and the true value of $\mu$ on the x-axis; make a second plot (or overlay on the first) showing the average estimate of $\hat{\mu}$ only in samples for which the null was rejected on the y-axis and the true value of $\mu$ on the x-axis.
+
+```{r}
+# Ensure mu_hat is numeric
+all_results$mu_hat <- as.numeric(all_results$mu_hat)
+
+# Calculate the average estimate of mu_hat for each true mu
+avg_mu_hat <- all_results %>%
+  group_by(mu) %>%
+  summarize(avg_mu_hat = mean(mu_hat, na.rm = TRUE))
+
+# Calculate the average estimate of mu_hat only for samples where null was rejected
+avg_mu_hat_rejected <- all_results %>%
+  filter(p_value < 0.05) %>%
+  group_by(mu) %>%
+  summarize(avg_mu_hat_rejected = mean(mu_hat, na.rm = TRUE))
+
+# Merge the two datasets
+plot_data <- left_join(avg_mu_hat, avg_mu_hat_rejected, by = "mu")
+
+# Plot the average estimate of mu_hat vs. the true value of mu
+plot(plot_data$mu, plot_data$avg_mu_hat, type = "o", pch = 16, col = "#00a497",
+     xlab = expression("True Value of " * mu),
+     ylab = expression("Average Estimate of " * hat(mu)),
+     main = expression("Average Estimate of " * hat(mu) * " vs. True Value of " * mu))
+lines(plot_data$mu, plot_data$avg_mu_hat_rejected, type = "o", pch = 16, col = "#a34400")
+legend("topleft", legend = c("All Samples", "Samples with Rejected Null"),
+       col = c("#00a497", "#a34400"), pch = 16)
+grid()
+```
+
+Is the sample average of $\hat{\mu}$ across tests for which the null is rejected approximately equal to the true value of $\mu$? Why or why not?
+
+No, the sample average of $\hat{\mu}$ across tests for which the null is rejected is generally NOT approximately equal to the true value of $\mu$. This discrepancy can be seen on the plot for lower $\mu$ values of 1, 2, and 3. For $\mu$ = 4, 5, 6, the sample average of $\hat{\mu}$ is closer t the true value of $\mu$.
+
+This discrepancy arises due to selection bias. When we only consider samples in which the null hypothesis is rejected (i.e., $p < 0.05$), we are more likely to include samples with values of $\hat{\mu}$ that deviate farther from zero.
+
+
+## Problem 3
+
+Loading the data
+```{r}
+# Define the URL of the CSV file
+url <- "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv"
+
+# Read the CSV file into a data frame
+homicide_data <- read_csv(url)
+
+# Display the first few rows of the data frame
+head(homicide_data)
+```
+
+The dataset contains information about homicides across different cities, with columns capturing details about each victim and the case’s disposition status. The variables are as following:
+
+- `uid`: A unique identifier for each homicide case.
+
+- `reported_date`: The date the homicide was reported, in YYYYMMDD format.
+
+- `victim_last` and `victim_first`: The last and first names of the victim.
+
+- `victim_race`: The race of the victim (e.g., Hispanic, White).
+
+- `victim_age`: The age of the victim at the time of the homicide.
+
+- `victim_sex`: The gender of the victim.
+
+- `city` and `state`: The city and state where the homicide occurred.
+
+- `lat` and `lon`: Latitude and longitude coordinates of the homicide location.
+
+- `disposition`: The status of the case, indicating whether it was solved. Possible values include "Closed by arrest," "Closed without arrest," and "Open/No arrest."
+
+
+
+Create a `city_state variable` and then summarize within cities to obtain the total number of homicides and the number of unsolved homicides.
+
+```{r}
+# Create the city_state variable
+homicide_data <- homicide_data %>%
+  mutate(city_state = paste(city, state, sep = ", "))
+
+# Define unsolved dispositions
+unsolved_dispositions <- c("Closed without arrest", "Open/No arrest")
+
+# Summarize data by city
+city_summary <- homicide_data %>%
+  group_by(city_state) %>%
+  summarize(
+    total_homicides = n(),
+    unsolved_homicides = sum(disposition %in% unsolved_dispositions)
+  )
+
+```
+
+
+For the city of Baltimore, MD, use the `prop.test` function to estimate the proportion of homicides that are unsolved; save the output of `prop.test` as an R object, apply the `broom::tidy` to this object and pull the estimated proportion and confidence intervals from the resulting tidy dataframe.
+
+```{r}
+# Filter data for Baltimore, MD
+baltimore_data <- homicide_data %>%
+  filter(city == "Baltimore" & state == "MD")
+
+# Count total cases and unsolved cases
+total_cases <- nrow(baltimore_data)
+unsolved_cases <- baltimore_data %>%
+  filter(disposition == "Closed without arrest" | disposition == "Open/No arrest") %>%
+  nrow()
+
+# Perform a proportion test
+prop_test_result <- prop.test(unsolved_cases, total_cases)
+
+tidy_result <- broom::tidy(prop_test_result)
+
+# Extract the estimated proportion and confidence intervals
+estimated_proportion <- tidy_result %>% pull(estimate)
+conf_low <- tidy_result %>% pull(conf.low)
+conf_high <- tidy_result %>% pull(conf.high)
+
+# Display the results
+estimated_proportion
+conf_low
+conf_high
+```
+
+Run `prop.test` for each of the cities in your dataset, and extract both the proportion of unsolved homicides and the confidence interval for each. 
+
+```{r}
+# Create a tidy pipeline to calculate proportions and confidence intervals for each city
+city_results <- homicide_data %>%
+  mutate(city_state = paste(city, state, sep = ", ")) %>%
+  # Summarize by city to get total cases and unsolved cases
+  group_by(city_state) %>%
+  summarize(
+    total_cases = n(),
+    unsolved_cases = sum(disposition == "Closed without arrest" | disposition == "Open/No arrest")
+  ) %>%
+  # Run `prop.test` for each city using `map`
+  mutate(
+    prop_test = map2(unsolved_cases, total_cases, ~prop.test(.x, .y) %>% broom::tidy())
+  ) %>%
+  # Unnest the results to create a tidy data frame with proportions and CIs
+  unnest(prop_test) %>%
+  # Select relevant columns for final output
+  select(city_state, estimated_proportion = estimate, conf_low = conf.low, conf_high = conf.high)
+
+```
+
+Create a plot that shows the estimates and CIs for each city; organize cities according to the proportion of unsolved homicides.
+
+```{r}
+# Arrange city_results by estimated proportion and remove rows with NA estimates
+plot_data <- city_results %>%
+  filter(city_state != "Tulsa, AL") %>% # Tulsa, AL only has 1 solved homicide case and is thus omitted.
+  arrange(estimated_proportion) %>%
+  mutate(city_state = factor(city_state, levels = city_state))  # Organize cities in order
+
+# Create the plot
+ggplot(plot_data, aes(x = city_state, y = estimated_proportion)) +
+  geom_errorbar(aes(ymin = conf_low, ymax = conf_high), width = 0.2, size = 0.8, color = "gray") +  
+  geom_point(color = "#00a497") +  # Add points for each city's estimated proportion
+  coord_flip() +  # Flip coordinates for better readability
+  labs(
+    x = "City, State",
+    y = "Proportion of Unsolved Homicides",
+    title = "Estimated Proportion of Unsolved Homicides by City with Confidence Intervals"
+  ) +
+  theme_minimal()
+```
+
+
+
+### Some purely exploratory plots; NOT PART OF THE ANSWER - DO NOT GRADE.
+
+```{r}
+library(maps)
+library(viridis)
+
+# Prepare city-level data for unsolved homicide proportions
+city_summary <- homicide_data %>%
+  group_by(city, state) %>%
+  summarize(
+    total_cases = n(),
+    unsolved_cases = sum(disposition == "Closed without arrest" | disposition == "Open/No arrest"),
+    estimated_proportion = ifelse(total_cases > 0, unsolved_cases / total_cases, NA)
+  ) %>%
+  filter(!is.na(estimated_proportion))  # Remove cities with NA proportions
+
+# Add latitude and longitude information for each city
+city_summary <- city_summary %>%
+  left_join(homicide_data %>% select(city, state, lat, lon) %>% distinct(), by = c("city", "state"))
+
+# Get map data for the US
+us_map_data <- map_data("state")
+
+# Plot the heatmap of US cities
+ggplot() +
+  # Base US map with state boundaries for reference
+  geom_polygon(data = us_map_data, aes(x = long, y = lat, group = group),
+               fill = "gray90", color = "white", size = 0.5) +
+  
+  # Overlay city points colored by the proportion of unsolved homicides
+  geom_point(data = city_summary, aes(x = lon, y = lat, color = estimated_proportion), size = 3, alpha = 0.7) +
+  scale_color_viridis(
+    option = "plasma",  # Choose a "viridis" color pattern
+    name = "Proportion of Unsolved Homicides"
+  ) +
+  labs(
+    title = "Proportion of Unsolved Homicides by City in the US",
+    subtitle = "Data aggregated at the city level"
+  ) +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+```{r}
+# Create a lookup table to map state abbreviations to full names
+state_lookup <- data.frame(
+  state_abb = tolower(state.abb),
+  state_name = tolower(state.name)
+)
+
+# Prepare state-level data for unsolved homicide proportions and convert abbreviations to full names
+state_summary <- homicide_data %>%
+  mutate(state = tolower(state)) %>%  # Convert state abbreviations to lowercase
+  left_join(state_lookup, by = c("state" = "state_abb")) %>%
+  group_by(state_name) %>%
+  summarize(
+    total_cases = n(),
+    unsolved_cases = sum(disposition == "Closed without arrest" | disposition == "Open/No arrest"),
+    estimated_proportion = ifelse(total_cases > 0, unsolved_cases / total_cases, NA)
+  ) %>%
+  filter(!is.na(estimated_proportion))  # Remove states with NA proportions
+
+# Get map data for the US states
+us_map_data <- map_data("state")
+
+# Merge state summary with map data
+map_data <- us_map_data %>%
+  left_join(state_summary, by = c("region" = "state_name"))
+
+# Plot the heatmap of US states
+ggplot(map_data, aes(x = long, y = lat, group = group, fill = estimated_proportion)) +
+  geom_polygon(color = "white") +  # Draw state boundaries in white
+  scale_fill_viridis(
+    option = "plasma",  # Choose a "viridis" color pattern
+    na.value = "gray",  # Gray for states without data
+    name = "Proportion of Unsolved Homicides"
+  ) +
+  labs(
+    title = "Proportion of Unsolved Homicides by Biggest Cities of a State in the US",
+    subtitle = "Data aggregated at the state level"
+  ) +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+```{r}
+library(sf)  # For handling spatial data
+
+# Set the CRS if it's missing, using an appropriate Chicago CRS (e.g., EPSG:3435 for Illinois East)
+if (is.na(st_crs(chicago_neighborhoods))) {
+  chicago_neighborhoods <- st_set_crs(chicago_neighborhoods, 3435)  # Example CRS for Chicago maps
+}
+
+# Convert homicide data to an sf object and classify as solved or unsolved
+homicide_sf <- homicide_data %>%
+  filter(city == "Chicago") %>%
+  mutate(
+    status = ifelse(disposition %in% c("Closed by arrest"), "Solved", "Unsolved")
+  ) %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326)  # Assuming WGS84 CRS for lat/lon
+
+# Transform CRS of homicide_sf to match chicago_neighborhoods for proper overlay
+homicide_sf <- st_transform(homicide_sf, st_crs(chicago_neighborhoods))
+
+# Create the plot
+ggplot() +
+  # Plot the Chicago neighborhoods as the base map
+  geom_sf(data = chicago_neighborhoods, fill = "gray90", color = "white") +
+  
+  # Plot each homicide case, coloring by whether it was solved or unsolved
+  geom_sf(data = homicide_sf, aes(color = status), size = 2, alpha = 0.3) +
+  
+  # Define colors for solved and unsolved cases
+  scale_color_manual(
+    values = c("Unsolved" = "#00a497", "Solved" = "#a34400"),
+    name = "Homicide Status"
+  ) +
+  
+  # Plot settings
+  labs(
+    title = "Homicide Cases in Chicago",
+    subtitle = "Distinguishing Solved and Unsolved Cases",
+    color = "Case Status"
+  ) +
+  theme_void() +
+  theme(legend.position = "right")
+```
 
