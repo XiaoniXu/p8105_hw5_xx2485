@@ -304,9 +304,11 @@ ggplot(plot_data, aes(x = city_state, y = estimated_proportion)) +
 
 
 
-### Some purely exploratory plots; NOT PART OF THE ANSWER - DO NOT GRADE.
+### Some purely exploratory plots; 
 
-```{r}
+NOT PART OF THE ANSWER - DO NOT GRADE. Set to `eval = FALSE` at the moment.
+
+```{r, eval = FALSE}
 library(maps)
 library(viridis)
 
@@ -347,7 +349,7 @@ ggplot() +
   theme(legend.position = "right")
 ```
 
-```{r}
+```{r, eval = FALSE}
 # Create a lookup table to map state abbreviations to full names
 state_lookup <- data.frame(
   state_abb = tolower(state.abb),
@@ -389,8 +391,11 @@ ggplot(map_data, aes(x = long, y = lat, group = group, fill = estimated_proporti
   theme(legend.position = "right")
 ```
 
-```{r}
+```{r, eval = FALSE}
 library(sf)  # For handling spatial data
+
+# Load neighborhood shapefile for the base map
+chicago_neighborhoods <- st_read("Neighborhoods_2012b.shx")
 
 # Set the CRS if it's missing, using an appropriate Chicago CRS (e.g., EPSG:3435 for Illinois East)
 if (is.na(st_crs(chicago_neighborhoods))) {
