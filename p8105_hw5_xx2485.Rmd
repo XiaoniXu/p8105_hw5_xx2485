@@ -12,6 +12,7 @@ library(dplyr)
 library(readr)
 library(purrr)
 library(tidyr)
+library(knitr)
 library(ggplot2)
 ```
 
@@ -98,7 +99,7 @@ summary(sim_results)
 Repeat for mu = 1, 2, 3, 4, 5, 6
 ```{r}
 # Run the simulation for mu values from 1 to 6
-mu_values <- 1:6
+mu_values <- 0:6
 results <- list()
 
 for (mu in mu_values) {
@@ -166,7 +167,7 @@ grid()
 
 Is the sample average of $\hat{\mu}$ across tests for which the null is rejected approximately equal to the true value of $\mu$? Why or why not?
 
-No, the sample average of $\hat{\mu}$ across tests for which the null is rejected is generally NOT approximately equal to the true value of $\mu$. This discrepancy can be seen on the plot for lower $\mu$ values of 1, 2, and 3. For $\mu$ = 4, 5, 6, the sample average of $\hat{\mu}$ is closer t the true value of $\mu$.
+No, the sample average of $\hat{\mu}$ across tests for which the null is rejected is generally NOT approximately equal to the true value of $\mu$. This discrepancy can be seen on the plot for lower $\mu$ values of 1, 2, and 3. For $\mu$ = 4, 5, 6, the sample average of $\hat{\mu}$ is closer t the true value of $\mu$. For $\mu$ = 0, the observed data has no deviation from 0, thus no effect size. The variability in $\hat{\mu}$ only comes from random sampling error, which is balanced around the true value of 0. This explains $\hat{\mu}$ and $\mu$ being closer to each other at 0.
 
 This discrepancy arises due to selection bias. When we only consider samples in which the null hypothesis is rejected (i.e., $p < 0.05$), we are more likely to include samples with values of $\hat{\mu}$ that deviate farther from zero.
 
@@ -225,6 +226,13 @@ city_summary <- homicide_data %>%
     unsolved_homicides = sum(disposition %in% unsolved_dispositions)
   )
 
+# Display the summarized data
+city_summary %>%
+  kable(
+    col.names = c("City, State", "Total Homicides", "Unsolved Homicides"),
+    caption = "Summary of Homicides by City"
+  )
+
 ```
 
 
@@ -278,14 +286,22 @@ city_results <- homicide_data %>%
   # Select relevant columns for final output
   select(city_state, estimated_proportion = estimate, conf_low = conf.low, conf_high = conf.high)
 
+# Display city_results
+city_results %>%
+  kable(
+    col.names = c("City, State", "Estimated Proportion of Unsolved Cases", "Confidence Interval Low", "Confidence Interval High"),
+    caption = "Proportion of Unsolved Homicide Cases by City with Confidence Intervals"
+  )
 ```
 
 Create a plot that shows the estimates and CIs for each city; organize cities according to the proportion of unsolved homicides.
 
+Notes: There is no city called Tulsa in Alabama (AL) - this might be a typing error in the original dataset. This data point is thus omitted in the plot.
+
 ```{r}
 # Arrange city_results by estimated proportion and remove rows with NA estimates
 plot_data <- city_results %>%
-  filter(city_state != "Tulsa, AL") %>% # Tulsa, AL only has 1 solved homicide case and is thus omitted.
+  filter(city_state != "Tulsa, AL") %>% # Tulsa, AL omitted
   arrange(estimated_proportion) %>%
   mutate(city_state = factor(city_state, levels = city_state))  # Organize cities in order
 
